@@ -1,24 +1,31 @@
 package com.codingblocksmodules.todoapp
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.*
-import androidx.appcompat.app.AppCompatActivity
+import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.codingblocksmodules.todoapp.databinding.ActivityMainBinding
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
-class MainActivity : AppCompatActivity() {
 
-    val DB_NAME = "Todo.db"
+class MainActivity : AppCompatActivity() {
     private val list = arrayListOf<TodoModel>()
     var adapter = TodoAdapter(this , list)
     private lateinit var binding:ActivityMainBinding
@@ -36,7 +43,7 @@ class MainActivity : AppCompatActivity() {
         setSupportActionBar(binding.toolbar)
 
         binding.todoRV.apply {
-            layoutManager = LinearLayoutManager(this@MainActivity)
+            layoutManager = LinearLayoutManager(this@MainActivity, LinearLayoutManager.VERTICAL,true)
             adapter = this@MainActivity.adapter
         }
 
@@ -53,6 +60,13 @@ class MainActivity : AppCompatActivity() {
                 adapter.notifyDataSetChanged()
             }
         })
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name= "todoAppChannel"
+            val importance = NotificationManager.IMPORTANCE_HIGH
+            val channel = NotificationChannel("todoAppChannel", name, importance)
+            nm.createNotificationChannel(channel)
+        }
     }
 
     //util function to perform appropriate action according to the swipe made
@@ -70,14 +84,38 @@ class MainActivity : AppCompatActivity() {
                 val position = viewHolder.adapterPosition
                 if(direction == ItemTouchHelper.LEFT){
                     //delete the task if item is left swiped
+                    val item = list[position]
                     GlobalScope.launch(Dispatchers.IO){
                         db.todoDao().deleteTask(adapter.getItemId(position))
                     }
+                    Snackbar.make(binding.todoRV, "Task ${item.title} Deleted", Snackbar.LENGTH_SHORT)
+                        .setAction("Undo") {
+                            GlobalScope.launch(Dispatchers.IO) {
+                                db.todoDao().insertTask(item)
+                            }
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Reinserted ${item.title} Successfully.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }.show()
                 }else if(direction == ItemTouchHelper.RIGHT){
                     //finish the task if item is right swiped
+                    val item = list[position]
                     GlobalScope.launch(Dispatchers.IO){
                         db.todoDao().finishTask(adapter.getItemId(position))
                     }
+                    Snackbar.make(binding.todoRV, "Task ${item.title} Back To Uncompleted.", Snackbar.LENGTH_SHORT)
+                        .setAction("Undo") {
+                            GlobalScope.launch(Dispatchers.IO) {
+                                db.todoDao().unFinishTask(item.id)
+                            }
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Reinserted ${item.title} Successfully.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }.show()
                 }
             }
 
@@ -95,18 +133,33 @@ class MainActivity : AppCompatActivity() {
                 if(actionState == ItemTouchHelper.ACTION_STATE_SWIPE){
                     val itemView = viewHolder.itemView
                     val paint = Paint()
+                    val icon:Bitmap
 
                     if(dX>0){
                         //right swipe, make the canvas at background of green color
+                        icon = ContextCompat.getDrawable(applicationContext, R.drawable.ic_check)?.toBitmap()!!
                         paint.color = Color.parseColor("#388E3C")
                         canvas.drawRect(itemView.left.toFloat() ,itemView.top.toFloat() ,
                                         itemView.left.toFloat()+dX , itemView.bottom.toFloat() , paint)
+                        canvas.drawBitmap(
+                            icon,
+                            itemView.left.toFloat(),
+                            itemView.top.toFloat() + (itemView.bottom.toFloat() - itemView.top.toFloat() - icon.height.toFloat()) / 2,
+                            paint
+                        )
 
                     }else{
                         //left swipe, make the canvas at background of red color
+                        icon = ContextCompat.getDrawable(applicationContext, R.drawable.ic_delete)?.toBitmap()!!
                         paint.color = Color.parseColor("#D32F2F")
                         canvas.drawRect(itemView.right.toFloat()+dX , itemView.top.toFloat(),
                                         itemView.right.toFloat(),itemView.bottom.toFloat(),paint)
+                        canvas.drawBitmap(
+                            icon,
+                            itemView.right.toFloat() - icon.width,
+                            itemView.top.toFloat() + (itemView.bottom.toFloat() - itemView.top.toFloat() - icon.height.toFloat()) / 2,
+                            paint
+                        )
 
                     }
 
@@ -183,7 +236,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when(item.itemId){
-            R.id.history ->{
+            R.id.completedTasks ->{
                 startActivity(Intent(this, HistoryActivity::class.java))
             }
         }
@@ -194,4 +247,5 @@ class MainActivity : AppCompatActivity() {
     fun openNewTask(view: View) {
         startActivity(Intent(this, TaskActivity::class.java))
     }
+
 }

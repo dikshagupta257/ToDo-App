@@ -1,25 +1,31 @@
 package com.codingblocksmodules.todoapp
 
 import android.annotation.SuppressLint
+import android.app.AlarmManager
 import android.app.DatePickerDialog
+import android.app.PendingIntent
 import android.app.TimePickerDialog
-import androidx.appcompat.app.AppCompatActivity
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.DatePicker
+import android.widget.SpinnerAdapter
 import android.widget.TimePicker
+import androidx.appcompat.app.AppCompatActivity
 import com.codingblocksmodules.todoapp.databinding.ActivityTaskBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
+
 
 class TaskActivity : AppCompatActivity(), View.OnClickListener {
     private lateinit var binding:ActivityTaskBinding
 
+    private lateinit var spinnerAdapter: SpinnerAdapter
     private lateinit var myCalendar:Calendar
     private lateinit var dateSetListener : DatePickerDialog.OnDateSetListener
     private lateinit var timeSetListener : TimePickerDialog.OnTimeSetListener
@@ -42,12 +48,15 @@ class TaskActivity : AppCompatActivity(), View.OnClickListener {
         binding.dateEdt.setOnClickListener(this)
         binding.timeEdt.setOnClickListener(this)
         binding.saveBtn.setOnClickListener(this)
+        binding.imgAddCategory.setOnClickListener {
+            addCategory()
+        }
         setUpSpinner()
     }
 
     //setting up spinner for labels
     private fun setUpSpinner() {
-        val spinnerAdapter = ArrayAdapter(this,
+        spinnerAdapter = ArrayAdapter(this,
                                             android.R.layout.simple_spinner_dropdown_item,
                                             labels)
 
@@ -65,18 +74,48 @@ class TaskActivity : AppCompatActivity(), View.OnClickListener {
         }
     }
 
+    //to add custom category by user
+    private fun addCategory() {
+        binding.categoryInpLay.visibility = View.VISIBLE
+    }
+
     //util function to save data of task entered by the user in database
     private fun saveTodo() {
-        val category = binding.spinnerCategory.selectedItem.toString()
+        val addedCategory = binding.categoryInpLay.editText?.text.toString()
+        val category: String = if(addedCategory.isNotEmpty()){
+            addedCategory
+        }else{
+            binding.spinnerCategory.selectedItem.toString()
+        }
         val title = binding.titleInpLay.editText?.text.toString()
         val description = binding.taskInpLay.editText?.text.toString()
-        GlobalScope.launch(Dispatchers.Main) {
-            withContext(Dispatchers.IO){
-                return@withContext db.todoDao().insertTask(
-                    TodoModel(title , description , category , finalDate , finalTime)
-                )
+
+        when {
+            title.isEmpty() -> {
+                binding.titleInpLay.error = "Title cannot be empty!"
             }
-            finish()
+            description.isEmpty() -> {
+                binding.taskInpLay.error = "Task cannot be empty!"
+            }
+            finalDate == 0L -> {
+                binding.dateInpLay.error = "Please set a date."
+            }
+            finalTime == 0L -> {
+                binding.timeInpLay.error = "Please set a time."
+            }
+            else -> {
+                GlobalScope.launch(Dispatchers.IO) {
+                    db.todoDao().insertTask(
+                        TodoModel(title, description, category, finalDate, finalTime)
+                    )
+                }
+                val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                val alarmShowIntent = Intent(this, MyReceiver::class.java)
+                alarmShowIntent.putExtra("TodoTitle", title)
+                val pendingIntent = PendingIntent.getBroadcast(this, 123, alarmShowIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+                alarmManager.set(AlarmManager.RTC_WAKEUP, myCalendar.timeInMillis, pendingIntent)
+                finish()
+            }
         }
     }
 
@@ -87,9 +126,8 @@ class TaskActivity : AppCompatActivity(), View.OnClickListener {
             myCalendar.set(Calendar.YEAR , year)
             myCalendar.set(Calendar.MONTH, month)
             myCalendar.set(Calendar.DAY_OF_MONTH , dayOfMonth)
+            updateDate()
         }
-
-        updateDate()
 
         //date picker dialog box
         val datePickerDialog = DatePickerDialog(this , dateSetListener ,
@@ -106,9 +144,8 @@ class TaskActivity : AppCompatActivity(), View.OnClickListener {
         val sdf = SimpleDateFormat(myFormat)  //simple date format
         binding.dateEdt.setText(sdf.format(myCalendar.time))
         finalDate = myCalendar.time.time
-        binding.timeInptLay.visibility = View.VISIBLE
+        binding.timeInpLay.visibility = View.VISIBLE
     }
-
 
     //to select time selected from TimePickerDialog
     private fun setTimeListener() {
@@ -116,9 +153,8 @@ class TaskActivity : AppCompatActivity(), View.OnClickListener {
         timeSetListener = TimePickerDialog.OnTimeSetListener{_ : TimePicker , hourOfDay : Int , min:Int ->
             myCalendar.set(Calendar.HOUR_OF_DAY , hourOfDay)
             myCalendar.set(Calendar.MINUTE , min)
+            updateTime()
         }
-
-        updateTime()
 
         //time picker dialog box
         val timePickerDialog = TimePickerDialog(
