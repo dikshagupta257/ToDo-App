@@ -1,12 +1,8 @@
 package com.codingblocksmodules.todoapp
 
 import android.annotation.SuppressLint
-import android.app.AlarmManager
 import android.app.DatePickerDialog
-import android.app.PendingIntent
 import android.app.TimePickerDialog
-import android.content.Context
-import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
@@ -18,6 +14,7 @@ import com.codingblocksmodules.todoapp.databinding.ActivityTaskBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -105,16 +102,27 @@ class TaskActivity : AppCompatActivity(), View.OnClickListener {
             }
             else -> {
                 GlobalScope.launch(Dispatchers.IO) {
-                    db.todoDao().insertTask(
-                        TodoModel(title, description, category, finalDate, finalTime)
-                    )
+                    withContext(Dispatchers.IO) {
+                        return@withContext db.todoDao().insertTask(
+                            TodoModel(title, description, category, finalDate, finalTime)
+                        )
+                    }
+                    finish()
+//                    val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+//                    val alarmShowIntent = Intent(this, MyReceiver::class.java)
+//                    alarmShowIntent.putExtra("TodoTitle", title)
+//                    val pendingIntent = PendingIntent.getBroadcast(
+//                        this,
+//                        123,
+//                        alarmShowIntent,
+//                        PendingIntent.FLAG_UPDATE_CURRENT
+//                    )
+//                    alarmManager.set(
+//                        AlarmManager.RTC_WAKEUP,
+//                        myCalendar.timeInMillis,
+//                        pendingIntent
+//                    )
                 }
-                val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                val alarmShowIntent = Intent(this, MyReceiver::class.java)
-                alarmShowIntent.putExtra("TodoTitle", title)
-                val pendingIntent = PendingIntent.getBroadcast(this, 123, alarmShowIntent, PendingIntent.FLAG_UPDATE_CURRENT)
-                alarmManager.set(AlarmManager.RTC_WAKEUP, myCalendar.timeInMillis, pendingIntent)
-                finish()
             }
         }
     }
